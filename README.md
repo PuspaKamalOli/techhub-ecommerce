@@ -16,7 +16,8 @@ A comprehensive, full-featured e-commerce platform built with Django, featuring 
 
 1. [Overview](#overview)
 2. [🤖 Agentic AI System (Core Feature)](#-agentic-ai-system-core-feature)
-3. [Features](#features)
+3. [🧠 Intelligent Recommendation System](#-intelligent-recommendation-system)
+4. [Features](#features)
 4. [Tech Stack](#tech-stack)
 5. [Setup Instructions](#setup-instructions)
 6. [Database](#database)
@@ -37,7 +38,7 @@ A comprehensive, full-featured e-commerce platform built with Django, featuring 
 
 ## Overview
 
-TechHub is a professional-grade e-commerce platform built with Django. What sets it apart is a **fully agentic AI assistant** that can autonomously perform multi-step operations — searching products, managing carts, placing orders, and answering questions — all through natural conversation. The platform also features a premium dark-themed UI with glassmorphism, Stripe payment processing, and real-time analytics.
+TechHub is a professional-grade e-commerce platform built with Django. What sets it apart is a **fully agentic AI assistant** that can autonomously perform multi-step operations — searching products, managing carts, placing orders, and answering questions — all through natural conversation. It also features a **Bayesian recommendation engine** with time-decay ranking to surface the most relevant and trending products. The platform also features a premium dark-themed UI with glassmorphism, Stripe payment processing, and real-time analytics.
 
 ### Project Objectives
 
@@ -53,6 +54,7 @@ TechHub is a professional-grade e-commerce platform built with Django. What sets
 - ✅ **Fully Agentic AI Chatbot** — LLM autonomously selects and chains tools using ReAct reasoning
 - ✅ **12 Database Tools** — Cart, wishlist, orders, products, profile operations via natural language
 - ✅ **RAG Knowledge Base** — FAISS vector store for store-specific Q&A
+- ✅ **Intelligent Recommendations** — Bayesian average rating system with time-decay ranking
 - ✅ **Premium Dark UI** — Glassmorphism, gradient accents, scroll-reveal animations
 - ✅ **Secure Payment Processing** with Stripe integration
 - ✅ **Comprehensive Analytics** and reporting dashboard
@@ -223,6 +225,33 @@ User: "Place my order"
 Bot:  [calls place_order(user_id=5)]
       "Order placed! 🎉 Your order number is A3B8D1B60B3B. Total: $225.00."
 ```
+
+---
+
+## 🧠 Intelligent Recommendation System
+
+TechHub features a sophisticated, mathematics-driven recommendation engine rather than relying on simple order-based or randomized sorting.
+
+### Bayesian Average Rating
+
+The platform uses a Bayesian scoring formula to surface high-quality products. This prevents products with a single "5-star" review from outranking established products with hundreds of "4.8-star" reviews.
+
+- **Global Average Inclusion**: Low-review products are pulled towards the global average rating to prevent extreme skew.
+- **Dynamic Calculation**: Computed at the database level using `ExpressionWrapper` and mathematical functions directly within Django ORM.
+
+### Time-Decay Ranking (Gravity)
+
+To ensure the storefront remains fresh and dynamic, the recommendation engine incorporates a time-decay factor:
+
+- **Mathematical Decay**: A product's Bayesian score is divided by `(age_in_days + 2)^1.5`.
+- **Trending Bias**: Newer products receive a temporary ranking boost, allowing them to gain visibility alongside established best-sellers.
+
+### Integration Points
+
+The recommendation system natively powers several components of the platform:
+1. **Homepage Featured Products**: Automatically surfaces the top 8 highest-scoring products.
+2. **Related Products**: Context-aware recommendations on product detail pages targeting the same category.
+3. **Default Sorting**: Catalogs and search results default to a customized `highest_rated` sort powered by this algorithm.
 
 ---
 
