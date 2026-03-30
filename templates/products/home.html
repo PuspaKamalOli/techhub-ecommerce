@@ -1,0 +1,166 @@
+<!-- templates/products/home.html -->
+{% extends 'base.html' %}
+{% load static %}
+{% load product_filters %}
+
+{% block title %}TechHub - Your Electronics Store{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h1 class="display-4 fw-bold mb-4">Discover Next-Gen<br>Electronics</h1>
+                <p class="lead mb-4">Premium gadgets, cutting-edge technology, and unbeatable prices — all in one place.</p>
+                <a href="{% url 'products:product_list' %}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-rocket me-2"></i>Explore Products
+                </a>
+            </div>
+            <div class="col-md-6 text-center">
+                <i class="fas fa-microchip display-1 mb-3"></i>
+                <h3 class="fw-bold">Cutting-Edge Tech</h3>
+                <p class="text-secondary">Curated for the future</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Categories Section -->
+<section class="py-5">
+    <div class="container">
+        <h2 class="text-center mb-5 reveal">Shop by Category</h2>
+        <div class="row g-4">
+            {% for category in categories %}
+            <div class="col-md-3 col-sm-6 reveal stagger-{{ forloop.counter }}">
+                <a href="{% url 'products:category_detail' category.slug %}" class="category-card d-block">
+                    {% if category.image %}
+                        <img src="{{ category.image.url }}" alt="{{ category.name }}" class="mb-3" style="width: 60px; height: 60px;">
+                    {% else %}
+                        {% if category.name == "Laptops" %}
+                            <i class="fas fa-laptop fa-3x mb-3"></i>
+                        {% elif category.name == "Smartphones" %}
+                            <i class="fas fa-mobile-alt fa-3x mb-3"></i>
+                        {% elif category.name == "Audio" %}
+                            <i class="fas fa-headphones-alt fa-3x mb-3"></i>
+                        {% elif category.name == "Accessories" %}
+                            <i class="fas fa-keyboard fa-3x mb-3"></i>
+                        {% else %}
+                            <i class="fas fa-laptop fa-3x mb-3"></i>
+                        {% endif %}
+                    {% endif %}
+                    <h5>{{ category.name }}</h5>
+                    <p class="mb-0">{{ category.products.count }} Products</p>
+                </a>
+            </div>
+            {% empty %}
+            <div class="col-12 text-center">
+                <p class="text-muted">No categories available.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<!-- Featured Products Section -->
+<section class="py-5 bg-light">
+    <div class="container">
+        <h2 class="text-center mb-5 reveal">Featured Products</h2>
+        <div class="row g-4">
+            {% for product in featured_products %}
+            <div class="col-lg-3 col-md-4 col-sm-6 reveal stagger-{{ forloop.counter }}">
+                <div class="card product-card h-100">
+                    <div class="overflow-hidden">
+                        {% if product.image %}
+                            <img src="{{ product.image.url }}" class="card-img-top product-image" loading="lazy" alt="{{ product.name }}">
+                        {% elif product|get_primary_image %}
+                            <img src="{{ product|get_primary_image }}" class="card-img-top product-image" loading="lazy" alt="{{ product.name }}">
+                        {% else %}
+                            <div class="card-img-top product-image bg-light d-flex align-items-center justify-content-center" style="height: 220px;">
+                                <i class="fas fa-image fa-3x text-muted"></i>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <h6 class="card-title product-title">{{ product.name }}</h6>
+                        <div class="mb-2 text-warning small">
+                            <i class="fas fa-star"></i> {{ product.average_rating }} 
+                            <span class="text-muted">({{ product.review_count }})</span>
+                        </div>
+                        <p class="card-text text-muted small flex-grow-1">{{ product.description|truncatewords:10 }}</p>
+                        <div class="price-section mb-3">
+                            {% if product.has_discount %}
+                                <span class="product-price">${{ product.discount_price }}</span>
+                                <span class="product-original-price ms-2">${{ product.price }}</span>
+                            {% else %}
+                                <span class="product-price">${{ product.price }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'products:product_detail' product.slug %}" class="btn btn-outline-primary btn-sm">
+                                View Details
+                            </a>
+                            <form method="post" action="{% url 'cart:add_to_cart' product.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="quantity" value="1">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                    <i class="fas fa-cart-plus me-1"></i>Add to Cart
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12 text-center">
+                <p class="text-muted">No featured products available.</p>
+            </div>
+            {% endfor %}
+        </div>
+        
+        {% if featured_products %}
+        <div class="text-center mt-5 reveal">
+            <a href="{% url 'products:product_list' %}" class="btn btn-primary btn-lg">
+                View All Products <i class="fas fa-arrow-right ms-2"></i>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row text-center">
+            <div class="col-md-3 col-sm-6 mb-4 reveal stagger-1">
+                <div class="p-4">
+                    <i class="fas fa-shipping-fast fa-3x text-primary mb-3"></i>
+                    <h5 class="fw-bold">Fast Shipping</h5>
+                    <p class="text-muted small">Free shipping on orders over $100</p>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-4 reveal stagger-2">
+                <div class="p-4">
+                    <i class="fas fa-shield-alt fa-3x text-primary mb-3"></i>
+                    <h5 class="fw-bold">Secure Payment</h5>
+                    <p class="text-muted small">Your payment information is safe</p>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-4 reveal stagger-3">
+                <div class="p-4">
+                    <i class="fas fa-undo fa-3x text-primary mb-3"></i>
+                    <h5 class="fw-bold">Easy Returns</h5>
+                    <p class="text-muted small">30-day return policy</p>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-4 reveal stagger-4">
+                <div class="p-4">
+                    <i class="fas fa-headset fa-3x text-primary mb-3"></i>
+                    <h5 class="fw-bold">24/7 Support</h5>
+                    <p class="text-muted small">Customer support anytime</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

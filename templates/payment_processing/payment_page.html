@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Payment - {{ order.order_number }} - TechHub{% endblock %}
+
+{% block extra_css %}
+<style>
+    .payment-form {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    .payment-methods {
+        margin-bottom: 2rem;
+    }
+    .payment-method-card {
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .payment-method-card:hover {
+        border-color: var(--primary-color);
+        background-color: #f8f9fa;
+    }
+    .payment-method-card.selected {
+        border-color: var(--primary-color);
+        background-color: #e3f2fd;
+    }
+    .stripe-element {
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        padding: 12px;
+        background-color: white;
+    }
+    .payment-summary {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'products:home' %}">Home</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'orders:order_detail' order.order_number %}">Order {{ order.order_number }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Payment</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">
+                        <i class="fas fa-credit-card me-2"></i>Payment Details
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <!-- Payment Summary -->
+                    <div class="payment-summary">
+                        <h5>Order Summary</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Order Number:</strong> {{ order.order_number }}</p>
+                                <p><strong>Date:</strong> {{ order.created_at|date:"F j, Y" }}</p>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <p><strong>Subtotal:</strong> ${{ order.subtotal }}</p>
+                                <p><strong>Tax:</strong> ${{ order.tax_amount }}</p>
+                                <p><strong>Shipping:</strong> ${{ order.shipping_amount }}</p>
+                                <h4 class="text-primary">Total: ${{ order.total_amount }}</h4>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Methods -->
+                    <div class="payment-methods">
+                        <h5>Select Payment Method</h5>
+                        <div class="payment-method-card selected" data-method="stripe">
+                            <div class="d-flex align-items-center">
+                                <i class="fab fa-stripe fa-2x me-3 text-primary"></i>
+                                <div>
+                                    <h6 class="mb-1">Credit/Debit Card</h6>
+                                    <p class="mb-0 text-muted">Pay securely with Stripe</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stripe Payment Form -->
+                    <form id="payment-form" class="payment-form">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="card-element" class="form-label">Credit or debit card</label>
+                            <div id="card-element" class="stripe-element">
+                                <!-- Stripe Elements will be inserted here -->
+                            </div>
+                            <div id="card-errors" class="text-danger mt-2" role="alert"></div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submit-button">
+                                <i class="fas fa-lock me-2"></i>Pay ${{ order.total_amount }}
+                            </button>
+                            <a href="{% url 'payment_processing:payment_cancel' order.id %}" class="btn btn-outline-secondary">
+                                Cancel Payment
+                            </a>
+                        </div>
+                    </form>
+
+                    <!-- Security Notice -->
+                    <div class="mt-4 text-center">
+                        <small class="text-muted">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Your payment information is secure and encrypted. We never store your card details.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+    // Initialize Stripe
+    const stripe = Stripe('{{ stripe_public_key }}');
+    const elements = stripe.elements();
+    const clientSecret = '{{ client_secret }}';
+
+    // Create card element
+    const cardElement = elements.create('card', {
+        style: {
+            base: {
+                fontSize: '16px',
+                color: '#424770',
+                '::placeholder': {
+                    color: '#aab7c4',
+                },
+            },
+            invalid: {
+                color: '#9e2146',
+            },
+        },
+    });
+
+    cardElement.mount('#card-element');
+
+    // Handle form submission
+    const form = document.getElementById('payment-form');
+    const submitButton = document.getElementById('submit-button');
+    const cardErrors = document.getElementById('card-errors');
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+
+        const {error, paymentIntent} = await stripe.confirmCardPayment(clientSecret, {
+            payment_method: {
+                card: cardElement,
+                billing_details: {
+                    name: '{{ order.user.get_full_name|default:order.user.username }}',
+                    email: '{{ order.user.email }}',
+                },
+            },
+        });
+
+        if (error) {
+            cardErrors.textContent = error.message;
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i class="fas fa-lock me-2"></i>Pay ${{ order.total_amount }}';
+        } else {
+            // Payment successful
+            window.location.href = '{% url "payment_processing:payment_success" order.id %}';
+        }
+    });
+
+    // Handle card errors
+    cardElement.addEventListener('change', ({error}) => {
+        if (error) {
+            cardErrors.textContent = error.message;
+        } else {
+            cardErrors.textContent = '';
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    container_name: techhub-web
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=techhub.settings
+      - DEBUG=True
+    volumes:
+      - ./media:/app/media          # Persist uploaded files
+      - ./db.sqlite3:/app/db.sqlite3 # Persist database
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Development mode with hot-reload
+  # Uncomment and use: docker compose up dev
+  # dev:
+  #   build: .
+  #   container_name: techhub-dev
+  #   ports:
+  #     - "8000:8000"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - DEBUG=True
+  #   volumes:
+  #     - .:/app                     # Mount entire project for hot-reload
+  #   command: python manage.py runserver 0.0.0.0:8000
+  #   restart: unless-stopped
