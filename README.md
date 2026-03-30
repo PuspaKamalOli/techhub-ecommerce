@@ -1,10 +1,11 @@
 #  TechHub E-commerce Platform
 
-A comprehensive, full-featured e-commerce platform built with Django, featuring a **fully agentic AI chatbot** powered by LangChain + Groq (Llama 3.3 70B), a premium dark-themed UI with glassmorphism, secure Stripe payment processing, and real-time analytics.
+A comprehensive, full-featured e-commerce platform built with Django, featuring a **fully agentic AI chatbot** powered by LangChain and Local Ollama (Qwen 2.5 3B), a premium dark-themed UI with glassmorphism, secure Stripe payment processing, and real-time analytics.
 
 ![Django](https://img.shields.io/badge/Django-4.2.7-green)
 ![Python](https://img.shields.io/badge/Python-3.9-blue)
 ![LangChain](https://img.shields.io/badge/LangChain-Agentic-red)
+![Ollama](https://img.shields.io/badge/Ollama-Local_Inference-white)
 ![Groq](https://img.shields.io/badge/Groq-Llama_3.3_70B-orange)
 ![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-purple)
 ![Stripe](https://img.shields.io/badge/Stripe-API-blue)
@@ -98,7 +99,7 @@ The crown jewel of TechHub is its **fully agentic AI chatbot** — not a simple 
 │     ┌──────────────────────────────────────────────┐               │
 │     │  Thought → Action → Observation → Thought... │               │
 │     │                                              │  max 6 iters  │
-│     │  LLM: Groq / llama-3.3-70b-versatile        │               │
+│     │  LLM: Local Ollama (qwen2.5:3b) / Groq      │               │
 │     │  Temperature: 0.3 (deterministic)            │               │
 │     └──────────────────────────────────────────────┘               │
 │                                                                     │
@@ -154,7 +155,7 @@ When a user asks *"What is TechHub's return policy?"*, the RAG pipeline retrieve
 
 **3. Conversational Memory**
 
-Chat history is stored in the Django session (last 10 turns) and passed to the agent as `MessagesPlaceholder("chat_history")`. This enables multi-turn conversations:
+Chat history is stored in the Django session (last 10 turns) and loaded seamlessly into the frontend widget on page loads using Django Template syntax. This enables multi-turn, persistent conversations across different pages:
 
 ```
 User: "Show me laptops"
@@ -163,11 +164,12 @@ User: "Add the first one to my cart"
 Bot:  [calls add_to_cart(product_id=2)] → "Done! Dell XPS 13 added to your cart."
 ```
 
-**4. Resilience & Error Handling**
+**4. Output Formatting & Resilience**
 
-- **Rate Limit Backoff**: Groq's free tier has rate limits. The agent retries with exponential backoff (15s, 30s) on HTTP 429 errors.
-- **Tool Validation Recovery**: If the LLM generates malformed tool arguments, the agent retries up to 2 times with a corrective error message.
-- **Graceful Degradation**: On unrecoverable errors, returns a user-friendly message instead of a stack trace.
+- **Regex Output Sanitizer**: A custom Python parser automatically strips markdown formatting and emojis from the LLM's outputs to strictly enforce a clean, professional chat interface.
+- **Hallucination Guards**: The `SYSTEM_PROMPT` enforces strict negative constraints to prevent the model from faking tool calls or fabricating nonexistent products.
+- **Tool Validation Recovery**: If the LLM generates malformed JSON tool arguments, the AgentExecutor automatically injects a corrective prompt forcing the model to fix its schema.
+- **API Resilience**: Exponential backoff (15s, 30s) is strictly implemented for users opting to use the cloud Groq API instead of the local Ollama backend.
 
 **5. Security Model**
 
@@ -348,7 +350,8 @@ The recommendation system natively powers several components of the platform:
 
 ### AI & Agentic System
 - **LangChain**: Framework for building agentic LLM applications
-- **Groq API**: Ultra-fast LLM inference (Llama 3.3 70B Versatile)
+- **Ollama**: Local, private LLM inference default (`qwen2.5:3b`)
+- **Groq API** (Optional): Cloud-hosted alternative (Llama 3.3)
 - **FAISS**: Facebook AI Similarity Search — vector database for RAG
 - **HuggingFace Embeddings**: `sentence-transformers/all-MiniLM-L6-v2` for text embeddings
 - **ReAct Pattern**: Reason + Act loop via `AgentExecutor` + `create_tool_calling_agent`

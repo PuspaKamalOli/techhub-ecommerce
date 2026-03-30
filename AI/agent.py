@@ -56,7 +56,12 @@ Guidelines:
 - Always scope operations to the current authenticated user (the user_id is provided in context)
 - For multi-step requests (e.g. "find a Samsung phone and add it to my cart"), call the needed \
   tools in sequence within a single response
+- NEVER claim to have modified a cart, placed an order, or searched for products without actually calling the tool first.
+- NEVER invent or make up products. ALWAYS use the `search_products` tool to find items in the store.
 - If context about TechHub is available below, use it to answer general questions about the store
+- NEVER use markdown formatting like asterisks (** or *) or hashes (#). Output plain text only.
+- NEVER use any emojis in your responses.
+- VERY IMPORTANT: When calling tools, strictly use the correct built-in tool calling format. NEVER append JSON arguments directly to the tool name string (e.g. do NOT output `search_products{{{{"query": "phone"}}}}`). You must separate the tool name from its JSON arguments.
 
 {rag_context}"""
 
@@ -106,12 +111,19 @@ def _build_prompt(rag_context: str) -> ChatPromptTemplate:
 
 def _build_executor(config: ChatbotConfig, user_id: int) -> AgentExecutor:
     """Build a fresh AgentExecutor bound to the given user."""
-    llm = ChatGroq(
-        api_key=config.groq_api_key,
-        model=config.llm.model_name,
-        temperature=config.llm.temperature,
-        max_tokens=config.llm.max_tokens,
-    )
+    if config.llm.use_ollama:
+        from langchain_ollama import ChatOllama
+        llm = ChatOllama(
+            model=config.llm.ollama_model,
+            temperature=config.llm.temperature,
+        )
+    else:
+        llm = ChatGroq(
+            api_key=config.groq_api_key,
+            model=config.llm.model_name,
+            temperature=config.llm.temperature,
+            max_tokens=config.llm.max_tokens,
+        )
 
     # Inject user_id context into every tool call via a partial wrapper
     # Tools receive user_id as an explicit argument; we rely on the LLM to
@@ -162,12 +174,19 @@ class ChatbotAgent:
             prompt = _build_prompt(rag_context)
 
             # 3. Build LLM + agent
-            llm = ChatGroq(
-                api_key=self.config.groq_api_key,
-                model=self.config.llm.model_name,
-                temperature=self.config.llm.temperature,
-                max_tokens=self.config.llm.max_tokens,
-            )
+            if self.config.llm.use_ollama:
+                from langchain_ollama import ChatOllama
+                llm = ChatOllama(
+                    model=self.config.llm.ollama_model,
+                    temperature=self.config.llm.temperature,
+                )
+            else:
+                llm = ChatGroq(
+                    api_key=self.config.groq_api_key,
+                    model=self.config.llm.model_name,
+                    temperature=self.config.llm.temperature,
+                    max_tokens=self.config.llm.max_tokens,
+                )
 
             agent = create_tool_calling_agent(llm, ALL_TOOLS, prompt)
             executor = AgentExecutor(
@@ -176,9 +195,10 @@ class ChatbotAgent:
                 verbose=True,
                 max_iterations=6,
                 handle_parsing_errors=(
-                    "Tool call failed. Please check the tool name and argument "
-                    "types carefully. Use only the tools listed above, and pass "
-                    "arguments with the correct types (e.g. integers for IDs)."
+                    "Tool call validation failed. "
+                    "CRITICAL: You must provide the tool name separate from the tool arguments. "
+                    "Do NOT append JSON arguments to the tool name string. "
+                    "Use ONLY the exact tool names provided in the schema."
                 ),
             )
 
@@ -195,7 +215,15 @@ class ChatbotAgent:
                         "input": augmented_message,
                         "chat_history": lc_history,
                     })
-                    return result.get("output", "I'm sorry, I couldn't process that. Please try again.")
+                    raw_out = result.get("output", "I'm sorry, I couldn't process that. Please try again.")
+                    
+                    import re
+                    # Strip markdown asterisks and hashes
+                    cleaned_out = re.sub(r'[*#]', '', raw_out)
+                    # Strip emojis (most are outside the basic multilingual plane)
+                    cleaned_out = re.sub(r'[\U00010000-\U0010ffff]', '', cleaned_out)
+                    
+                    return cleaned_out
                 except Exception as invoke_err:
                     last_error = invoke_err
                     err_str = str(invoke_err).lower()

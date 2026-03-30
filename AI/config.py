@@ -23,7 +23,8 @@ class RAGConfig:
 class LLMConfig:
     """Configuration for LLM (Large Language Model) components."""
     model_name: str = "llama-3.3-70b-versatile"
-    # model_name:str = "Qwen3-32B"
+    ollama_model: str = "qwen2.5:3b"
+    use_ollama: bool = True
     temperature: float = 0.3
     max_tokens: int = 500
 
@@ -40,7 +41,7 @@ class ChatbotConfig:
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         self.secret_key = os.getenv("SECRET_KEY")
 
-        if not self.groq_api_key:
+        if not self.llm.use_ollama and not self.groq_api_key:
             raise ValueError("GROQ_API_KEY not found in environment variables. Please set it in .env file.")
 
     def get_knowledge_base_path(self) -> Path:

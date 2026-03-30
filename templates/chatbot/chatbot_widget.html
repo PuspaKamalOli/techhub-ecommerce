@@ -49,6 +49,29 @@
                     </ul>
                 </div>
             </div>
+            
+            {% if request.session.chat_history %}
+                {% for msg in request.session.chat_history %}
+                <!-- User message -->
+                <div class="chatbot-message chatbot-message-user">
+                    <div class="chatbot-message-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="chatbot-message-content">
+                        <p>{{ msg.user }}</p>
+                    </div>
+                </div>
+                <!-- Bot message -->
+                <div class="chatbot-message chatbot-message-bot">
+                    <div class="chatbot-message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="chatbot-message-content">
+                        <p>{{ msg.assistant }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            {% endif %}
         </div>
         
         <!-- Chatbot Input Area -->
@@ -403,6 +426,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const clearBtn = document.getElementById('chatbot-clear');
     
     let isOpen = false;
+    
+    // Auto-scroll to bottom of messages area on load
+    if (messagesArea) {
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+    }
     
     // Toggle chatbot window
     toggleBtn.addEventListener('click', function() {
