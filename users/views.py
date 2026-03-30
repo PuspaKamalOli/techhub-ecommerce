@@ -6,6 +6,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django_ratelimit.decorators import ratelimit
+from django.utils.decorators import method_decorator
 
 class CustomLoginView(auth_views.LoginView):
     template_name = 'users/login.html'
@@ -15,7 +16,7 @@ class CustomLoginView(auth_views.LoginView):
         messages.success(self.request, 'Welcome back!')
         return super().form_valid(form)
 
-    @ratelimit(key='ip', rate='5/m', method='POST', block=True)
+    @method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True))
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
