@@ -23,7 +23,7 @@ class RAGConfig:
 class LLMConfig:
     """Configuration for LLM (Large Language Model) components."""
     model_name: str = "llama-3.3-70b-versatile"
-    ollama_model: str = "qwen2.5:3b"
+    ollama_model: str = "qwen2.5:7b"
     use_ollama: bool = True
     temperature: float = 0.3
     max_tokens: int = 500
