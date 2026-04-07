@@ -18,8 +18,14 @@ urlpatterns = [
 ]
 
 from techhub import views
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 # Serve media files from the PostgreSQL database
 urlpatterns += [
-    path('db-media/<path:path>', views.serve_neon_db_media, name='neon-db-media')
+    path('db-media/<path:path>', views.serve_neon_db_media, name='neon-db-media'),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
