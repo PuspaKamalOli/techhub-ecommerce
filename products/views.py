@@ -20,50 +20,53 @@ def is_admin(user):
 @user_passes_test(is_admin)
 def analytics_dashboard(request):
     """Analytics dashboard for e-commerce metrics"""
-    
-    # Get basic metrics
-    total_products = Product.objects.count()
-    total_orders = Order.objects.count()
-    total_sales = Order.objects.filter(status='completed').aggregate(
-        total=Sum('total_amount')
-    )['total'] or 0
-    
-    # Get payment metrics
-    try:
-        from payment_processing.models import Payment
-        total_payments = Payment.objects.filter(status='completed').count()
-        recent_payments = Payment.objects.select_related('order').order_by('-created_at')[:5]
-    except ImportError:
-        total_payments = 0
-        recent_payments = []
-    
-    # Get recent orders
-    recent_orders = Order.objects.select_related('user').order_by('-created_at')[:5]
-    
-    # Get category statistics with percentage calculation
-    category_stats = []
-    if total_products > 0:
-        categories = Category.objects.annotate(
-            product_count=Count('products')
-        ).filter(product_count__gt=0)
+    cache_key = 'admin_analytics_dashboard_full'
+    context = cache.get(cache_key)
+    if context is None:
+        # Get basic metrics
+        total_products = Product.objects.count()
+        total_orders = Order.objects.count()
+        total_sales = Order.objects.filter(status='completed').aggregate(
+            total=Sum('total_amount')
+        )['total'] or 0
         
-        for category in categories:
-            percentage = round((category.product_count / total_products) * 100, 1)
-            category_stats.append({
-                'name': category.name,
-                'product_count': category.product_count,
-                'percentage': percentage
-            })
-    
-    context = {
-        'total_products': total_products,
-        'total_orders': total_orders,
-        'total_sales': total_sales,
-        'total_payments': total_payments,
-        'recent_orders': recent_orders,
-        'recent_payments': recent_payments,
-        'category_stats': category_stats,
-    }
+        # Get payment metrics
+        try:
+            from payment_processing.models import Payment
+            total_payments = Payment.objects.filter(status='completed').count()
+            recent_payments = list(Payment.objects.select_related('order').order_by('-created_at')[:5])
+        except ImportError:
+            total_payments = 0
+            recent_payments = []
+        
+        # Get recent orders
+        recent_orders = list(Order.objects.select_related('user').order_by('-created_at')[:5])
+        
+        # Get category statistics with percentage calculation
+        category_stats = []
+        if total_products > 0:
+            categories = Category.objects.annotate(
+                product_count=Count('products')
+            ).filter(product_count__gt=0)
+            
+            for category in categories:
+                percentage = round((category.product_count / total_products) * 100, 1)
+                category_stats.append({
+                    'name': category.name,
+                    'product_count': category.product_count,
+                    'percentage': percentage
+                })
+        
+        context = {
+            'total_products': total_products,
+            'total_orders': total_orders,
+            'total_sales': total_sales,
+            'total_payments': total_payments,
+            'recent_orders': recent_orders,
+            'recent_payments': recent_payments,
+            'category_stats': category_stats,
+        }
+        cache.set(cache_key, context, 300) # Cache heavy admin analytics for 5 minutes
     
     return render(request, 'products/analytics_dashboard.html', context)
 
@@ -88,8 +91,15 @@ def home(request):
 
 def product_list(request):
     """Display all products with filtering and pagination"""
+    query_string = request.GET.urlencode()
+    cache_key = f'product_list_view_{query_string}' if query_string else 'product_list_view_default'
+    
+    cached_context = cache.get(cache_key)
+    if cached_context:
+        return render(request, 'products/product_list.html', cached_context)
+
     products = Product.objects.with_bayesian_score().filter(availability='in_stock').select_related('category').prefetch_related('images')
-    categories = Category.objects.all()
+    categories = list(Category.objects.all())
     
     # Category filtering
     category_slug = request.GET.get('category')
@@ -118,9 +128,12 @@ def product_list(request):
     else:
         products = products.order_by('-bayesian_score', '-created_at')
     
+    # Force evaluation before pickling so Redis handles it perfectly safely
+    products = list(products)
+    
     # Pagination
     paginator = Paginator(products, 12)  # 12 products per page
-    page_number = request.GET.get('page')
+    page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
     
     context = {
@@ -129,6 +142,7 @@ def product_list(request):
         'current_category': category_slug,
         'current_sort': sort_by,
     }
+    cache.set(cache_key, context, 300) # Cache search parameters safely
     return render(request, 'products/product_list.html', context)
 
 def search_autocomplete(request):
@@ -182,20 +196,27 @@ def product_detail(request, slug):
 
 def category_detail(request, slug):
     """Display products in a specific category"""
+    page_number = request.GET.get('page', 1)
+    cache_key = f'category_detail_{slug}_page_{page_number}'
+    
+    cached_context = cache.get(cache_key)
+    if cached_context:
+        return render(request, 'products/category_detail.html', cached_context)
+
     category = get_object_or_404(Category, slug=slug)
-    products = Product.objects.with_bayesian_score().filter(
+    products = list(Product.objects.with_bayesian_score().filter(
         category=category, availability='in_stock'
-    ).select_related('category').prefetch_related('images').order_by('-bayesian_score', '-created_at')
+    ).select_related('category').prefetch_related('images').order_by('-bayesian_score', '-created_at'))
     
     # Pagination
     paginator = Paginator(products, 12)
-    page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
     context = {
         'category': category,
         'page_obj': page_obj,
     }
+    cache.set(cache_key, context, 300)
     return render(request, 'products/category_detail.html', context)
 
 def search(request):
