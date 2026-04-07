@@ -85,23 +85,32 @@ TEMPLATES = [
 WSGI_APPLICATION = 'techhub.wsgi.application'
 
 # ── Database ──
-_db_url = urlparse(os.environ.get('DATABASE_URL', ''))
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': _db_url.path.lstrip('/'),
-        'USER': _db_url.username,
-        'PASSWORD': _db_url.password,
-        'HOST': _db_url.hostname,
-        'PORT': _db_url.port or 5432,
-        'OPTIONS': {
-            **dict(parse_qsl(_db_url.query)),
-            'connect_timeout': 10,
-            # NOTE: 'options' (statement_timeout) is NOT supported by NeonDB pooler endpoint
-        },
-        'CONN_MAX_AGE': 0,  # 0 = close after each request — recommended for NeonDB pooler
+_db_url_string = os.environ.get('DATABASE_URL', '')
+if _db_url_string:
+    _db_url = urlparse(_db_url_string)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': _db_url.path.lstrip('/'),
+            'USER': _db_url.username,
+            'PASSWORD': _db_url.password,
+            'HOST': _db_url.hostname,
+            'PORT': _db_url.port or 5432,
+            'OPTIONS': {
+                **dict(parse_qsl(_db_url.query)),
+                'connect_timeout': 10,
+                # NOTE: 'options' (statement_timeout) is NOT supported by NeonDB pooler endpoint
+            },
+            'CONN_MAX_AGE': 0,  # 0 = close after each request — recommended for NeonDB pooler
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # ── Redis Cache / Fallback ──
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1')

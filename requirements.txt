@@ -28,7 +28,7 @@ stripe==7.0.0
 
 # ── Database ──
 psycopg2-binary>=2.9.9
-
+pgvector>=0.2.0
 # ── Utilities ──
 python-dotenv==1.0.0
 Pillow==11.3.0
@@ -46,3 +46,5 @@ django-csp>=4.0
 sentry-sdk>=1.40.6
 
 langchain_huggingface
+mcp>=1.2.0
+langchain-mcp-adapters>=0.2.0
