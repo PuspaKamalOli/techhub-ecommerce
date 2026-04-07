@@ -83,6 +83,13 @@ def checkout(request):
         # Store order_number in session for guest access
         request.session[f'order_{order.order_number}'] = True
         
+        # Fire background Celery worker for E-Mail outbox processing asynchronously!
+        try:
+            from .tasks import send_order_confirmation_email
+            send_order_confirmation_email.delay(order.id)
+        except Exception as celery_err:
+            print(f"[Celery Dispatch Override] Background worker offline: {celery_err}")
+        
         messages.success(request, f'Order {order.order_number} placed successfully!')
         return redirect('orders:order_confirmation', order_number=order.order_number)
     

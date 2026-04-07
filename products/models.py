@@ -110,6 +110,13 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True, db_index=True)
     availability = models.CharField(max_length=20, choices=AVAILABILITY_CHOICES, default='in_stock', db_index=True)
     
+    # AI Semantic Search Vector (Uses pgvector native PostgreSQL types)
+    try:
+        from pgvector.django import VectorField
+        embedding = VectorField(dimensions=384, blank=True, null=True, help_text="Product embeddings for Semantic AI search")
+    except ImportError:
+        embedding = None
+    
     objects = ProductManager()
     all_objects = models.Manager()
     
