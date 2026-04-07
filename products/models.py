@@ -13,11 +13,17 @@ class ProductQuerySet(models.QuerySet):
         from django.db.models import Count, Avg, F, FloatField, ExpressionWrapper, Value
         from django.db.models.expressions import RawSQL
         from django.db.models.functions import Power, Coalesce
+        from django.core.cache import cache
         from products.models import ProductReview
 
-        global_avg = ProductReview.objects.aggregate(Avg('rating'))['rating__avg'] or 0.0
+        global_avg = cache.get('ecommerce_global_review_avg')
+        if global_avg is None:
+            global_avg = ProductReview.objects.aggregate(Avg('rating'))['rating__avg'] or 0.0
+            cache.set('ecommerce_global_review_avg', global_avg, 3600)  # Cached for 1 hr to stop DB spam
+            
         m = 2.0
-        gravity = 1.5
+        # E-commerce decay: items should decay slowly over months, not hours.
+        gravity = 0.15 
 
         # Bayesian score: pulls low-review products toward global average
         # Age in days is computed from release_date if set, otherwise from created_at
