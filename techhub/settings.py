@@ -3,6 +3,7 @@ import os
 import sentry_sdk
 from pathlib import Path
 from dotenv import load_dotenv
+from urllib.parse import urlparse, parse_qsl
 
 load_dotenv()
 
@@ -80,10 +81,21 @@ TEMPLATES = [
 WSGI_APPLICATION = 'techhub.wsgi.application'
 
 # ── Database ──
+_db_url = urlparse(os.environ.get('DATABASE_URL', ''))
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': _db_url.path.lstrip('/'),
+        'USER': _db_url.username,
+        'PASSWORD': _db_url.password,
+        'HOST': _db_url.hostname,
+        'PORT': _db_url.port or 5432,
+        'OPTIONS': {
+            **dict(parse_qsl(_db_url.query)),
+            'connect_timeout': 10,
+            # NOTE: 'options' (statement_timeout) is NOT supported by NeonDB pooler endpoint
+        },
+        'CONN_MAX_AGE': 0,  # 0 = close after each request — recommended for NeonDB pooler
     }
 }
 
@@ -129,8 +141,18 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL = '/media/'
+MEDIA_URL = '/db-media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Use Custom PostgreSQL Storage for uploaded files
+STORAGES = {
+    "default": {
+        "BACKEND": "techhub.storage.NeonDatabaseStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

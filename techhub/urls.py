@@ -17,6 +17,9 @@ urlpatterns = [
     path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
 ]
 
-# Serve media files in development
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+from techhub import views
+
+# Serve media files from the PostgreSQL database
+urlpatterns += [
+    path('db-media/<path:path>', views.serve_neon_db_media, name='neon-db-media')
+]

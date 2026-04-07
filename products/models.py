@@ -22,9 +22,13 @@ class ProductQuerySet(models.QuerySet):
         # Bayesian score: pulls low-review products toward global average
         # Age in days is computed from release_date if set, otherwise from created_at
         # Final score is divided by (age_days + 2)^gravity — newer products rank higher
+        # NOTE: uses PostgreSQL-compatible EXTRACT(EPOCH FROM ...) instead of SQLite julianday()
         age_expr = ExpressionWrapper(
             RawSQL(
-                "COALESCE(julianday('now') - julianday(products_product.release_date), julianday('now') - julianday(products_product.created_at))",
+                "COALESCE("
+                "  EXTRACT(EPOCH FROM (NOW() - products_product.release_date::timestamptz)) / 86400.0,"
+                "  EXTRACT(EPOCH FROM (NOW() - products_product.created_at)) / 86400.0"
+                ")",
                 []
             ),
             output_field=FloatField()
