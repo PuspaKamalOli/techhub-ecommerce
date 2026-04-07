@@ -399,6 +399,58 @@ def search_products(query: str) -> str:
 
 
 @tool
+def semantic_search_products(query: str) -> str:
+    """
+    Use this to semantically search for products based on complex or abstract user requests.
+    Examples: 'headphones for running in the rain', 'a cheap laptop for coding'.
+    This uses AI embeddings to mathematically match the meaning of the query.
+    Args:
+        query: Search query string describing the desired product concept.
+    Returns:
+        JSON string containing conceptually matching products.
+    """
+    try:
+        from langchain_huggingface import HuggingFaceEmbeddings
+        from pgvector.django import CosineDistance
+        
+        # We use a fast, small embedding model designed for sentence similarity
+        embedder = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        query_vector = embedder.embed_query(query)
+        
+        # Perform Cosine Similarity directly in Neon PostgreSQL
+        products = Product.objects.filter(
+            embedding__isnull=False, 
+            is_active=True,
+            availability='in_stock'
+        ).annotate(
+            distance=CosineDistance('embedding', query_vector)
+        ).order_by('distance')[:6]
+        
+        products_data = []
+        for product in products:
+            products_data.append({
+                'id': product.id,
+                'name': product.name,
+                'price': str(product.get_price),
+                'availability': product.availability,
+                'category': product.category.name,
+                'slug': product.slug,
+                'match_distance': float(product.distance)
+            })
+            
+        return json.dumps({
+            'success': True,
+            'products': products_data,
+            'count': len(products_data),
+            'note': 'These results are semantically matched via AI.'
+        })
+    except ImportError:
+        return json.dumps({'success': False, 'error': 'AI Embeddings or pgvector not properly configured.'})
+    except Exception as e:
+        return json.dumps({'success': False, 'error': str(e)})
+
+
+@tool
 def get_product_details(product_id: int) -> str:
     """
     Get detailed information about a specific product.
@@ -461,60 +513,35 @@ def get_user_profile(user_id: int) -> str:
 
 
 @tool
-def place_order(user_id: int) -> str:
+def generate_checkout_link(user_id: int) -> str:
     """
-    Place an order from the user's current shopping cart.
-    Converts all cart items into a new order and clears the cart afterwards.
-    Use this when the user wants to checkout or place/confirm their order.
+    Generates a secure checkout link for the user's cart.
+    Use this INSTEAD of placing an order automatically so the user can securely review and pay.
+    Crucial for Human-in-the-Loop financial confirmation.
     Args:
         user_id: The ID of the authenticated user
     Returns:
-        JSON string indicating success or failure with the new order number
+        JSON string indicating success or failure with the direct checkout URL sequence.
     """
     try:
-        import uuid
-        from decimal import Decimal as _Decimal
-
         user = User.objects.get(id=user_id)
-        cart = Cart.objects.get(user=user)
-        items = list(cart.items.all())
-
-        if not items:
+        cart = Cart.objects.filter(user=user).first()
+        
+        if not cart or cart.items.count() == 0:
             return json.dumps({
                 'success': False,
-                'error': 'Your cart is empty. Add items before placing an order.'
+                'error': 'Your cart is empty. Add items before proceeding to checkout.'
             })
 
-        total = sum(item.get_total_price() for item in items)
-
-        order = Order.objects.create(
-            user=user,
-            order_number=str(uuid.uuid4()).replace('-', '').upper()[:12],
-            total_amount=_Decimal(str(total)),
-            status='pending',
-            payment_status='pending',
-        )
-
-        for cart_item in items:
-            OrderItem.objects.create(
-                order=order,
-                product=cart_item.product,
-                quantity=cart_item.quantity,
-                price=cart_item.product.get_price,
-            )
-
-        cart.items.all().delete()
+        total = sum(item.get_total_price() for item in cart.items.all())
 
         return json.dumps({
             'success': True,
-            'message': 'Order placed successfully!',
-            'order_number': order.order_number,
-            'total_amount': str(total),
-            'status': order.status,
+            'message': f'Your cart has {cart.items.count()} items totaling ${total}. Please click the link to confirm and securely pay.',
+            'checkout_url': '/orders/checkout/',
+            'action_required': 'Display this URL directly to the user as a clickable markdown button/link.'
         })
 
-    except Cart.DoesNotExist:
-        return json.dumps({'success': False, 'error': 'No cart found. Add items to your cart first.'})
     except User.DoesNotExist:
         return json.dumps({'success': False, 'error': 'User not found.'})
     except Exception as e:

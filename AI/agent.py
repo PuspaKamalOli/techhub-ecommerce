@@ -28,7 +28,7 @@ from AI.tools import (
     get_user_orders, get_user_cart, add_to_cart, remove_from_cart,
     update_cart_item_quantity, get_user_wishlist, add_to_wishlist,
     remove_from_wishlist, search_products, get_product_details,
-    get_user_profile, place_order,
+    get_user_profile, generate_checkout_link, semantic_search_products
 )
 
 # ──────────────────────────────────────────────
@@ -52,8 +52,9 @@ ABSOLUTE RULES (NEVER BREAK THESE):
 1. You MUST call a tool BEFORE you claim the action was done.
    - To add an item: you MUST call add_to_cart first.
    - To remove an item: you MUST call remove_from_cart first.
-   - To search: you MUST call search_products first.
-   - To place an order: you MUST call place_order first.
+   - To search exactly: you MUST call search_products first.
+   - To discover abstract AI matching: you MUST call semantic_search_products first.
+   - To place an order: you MUST call generate_checkout_link first.
    If you did NOT call the tool, do NOT say the action was completed.
    NEVER say "removed" or "added" unless you see the tool result confirming it.
 
@@ -96,9 +97,10 @@ ALL_TOOLS = [
     add_to_wishlist,
     remove_from_wishlist,
     search_products,
+    semantic_search_products,
     get_product_details,
     get_user_profile,
-    place_order,
+    generate_checkout_link,
 ]
 
 # ──────────────────────────────────────────────
@@ -138,8 +140,24 @@ EXTERNAL_MCP_SERVERS = [os.path.join(os.path.dirname(__file__), "mcp_servers", "
 EXTENDED_TOOLS = ALL_TOOLS + fetch_mcp_tools(EXTERNAL_MCP_SERVERS)
 
 
-def _build_lc_history(raw_history: List[Dict]) -> List:
-    """Convert session history [{user, assistant}] → LangChain messages."""
+def _build_lc_history(raw_history: List[Dict], session_id: str = "default_session") -> List:
+    """
+    Connects directly to the Redis backbone to retrieve true persistent memory.
+    This replaces the shallow HTTP Session history capping with infinite storage.
+    """
+    try:
+        from langchain_community.chat_message_histories import RedisChatMessageHistory
+        redis_url = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1')
+        history = RedisChatMessageHistory(session_id, url=redis_url)
+        
+        # If Redis history is populated, we return it as LC format (it does this natively)
+        # But we must format it to memory arrays.
+        if len(history.messages) > 0:
+            return history.messages
+    except Exception as e:
+        print(f"[Memory Warning] Redis Persistent Memory Offline. Using Volatile RAM: {e}")
+
+    # Fallback volatile processing
     messages = []
     for entry in raw_history:
         if entry.get("user"):
@@ -199,13 +217,14 @@ class ChatbotAgent:
             knowledge_base_path=self.config.get_knowledge_base_path(),
         )
 
-    def chat(self, message: str, chat_history: Optional[List[Dict]] = None) -> str:
+    def chat(self, message: str, chat_history: Optional[List[Dict]] = None, session_id: str = "default_session") -> str:
         """
         Process a user message and return the agent's response.
 
         Args:
             message:      User input text
             chat_history: Session history as [{user: ..., assistant: ...}]
+            session_id:   The Redis tracking ID for persistent memory
 
         Returns:
             Agent response string
@@ -247,18 +266,12 @@ class ChatbotAgent:
                 tools=EXTENDED_TOOLS,
                 verbose=True,
                 max_iterations=8, # Bumped iterations to allow for deep CoT loops
-                handle_parsing_errors=(
-                    "Tool call validation failed. "
-                    "CRITICAL: You must provide the tool name separate from the tool arguments. "
-                    "Do NOT append JSON arguments to the tool name string. "
-                    "Use ONLY the exact tool names provided in the schema."
-                ),
+                handle_parsing_errors=True
             )
 
-            # 4. Convert session history to LangChain messages
-            lc_history = _build_lc_history(chat_history)
+            # 4. Convert history to LangChain format (with persistent Redis ID)
+            chat_history_lc = _build_lc_history(chat_history, session_id=session_id)
 
-            # 5. Invoke with retry for transient Groq API errors
             import time
             max_retries = 2
             last_error = None
@@ -266,47 +279,83 @@ class ChatbotAgent:
                 try:
                     result = executor.invoke({
                         "input": augmented_message,
-                        "chat_history": lc_history,
+                        "chat_history": chat_history_lc,
                     })
-                    raw_out = result.get("output", "I'm sorry, I couldn't process that. Please try again.")
+                    raw_out = result.get("output", "Sorry, an error occurred in reasoning.")
                     
                     import re
-                    # Strip markdown asterisks and hashes
                     cleaned_out = re.sub(r'[*#]', '', raw_out)
-                    # Strip emojis (most are outside the basic multilingual plane)
                     cleaned_out = re.sub(r'[\U00010000-\U0010ffff]', '', cleaned_out)
                     
                     return cleaned_out
                 except Exception as invoke_err:
                     last_error = invoke_err
                     err_str = str(invoke_err).lower()
-                    # Retry on transient Groq tool-call validation errors
                     is_retryable = (
                         "failed to call a function" in err_str
                         or "tool call validation failed" in err_str
                         or "did not match schema" in err_str
                     )
-                    # Retry on rate limit errors with backoff
                     is_rate_limited = "rate_limit" in err_str or "429" in err_str
                     if is_rate_limited and attempt < max_retries:
                         wait_secs = 15 * (attempt + 1)
-                        print(f"[ChatbotAgent] Rate limited, waiting {wait_secs}s before retry ({attempt + 1}/{max_retries})")
+                        print(f"[ChatbotAgent] Rate limited, waiting {wait_secs}s before retry")
                         time.sleep(wait_secs)
                         continue
                     if is_retryable and attempt < max_retries:
                         print(f"[ChatbotAgent] Retrying ({attempt + 1}/{max_retries}) after: {invoke_err}")
                         continue
                     raise last_error
-
         except Exception as e:
             import traceback
             print(f"[ChatbotAgent] Error: {e}")
             print(traceback.format_exc())
-            # Return user-friendly message for rate limit errors
             err_str = str(e).lower()
             if "rate_limit" in err_str or "429" in err_str:
                 return "I'm currently experiencing high demand. Please try again in a minute or two."
             return f"I apologize, but I encountered an error. Please try again."
+
+    async def astream_chat(self, message: str, session_id: str = "default_session"):
+        """
+        [NEW] Asynchronous Streaming Execution for Server-Sent Events / WebSockets.
+        Allows the frontend to stream <think> blocks and text responses in real-time.
+        """
+        rag_context = self.rag_service.retrieve_context(message, limit=2)
+        augmented_message = f"[Authenticated user_id: {self.user_id}]\n{message}"
+        prompt = _build_prompt(rag_context)
+        
+        # Build LLM + agent
+        if self.config.llm.use_ollama:
+            from langchain_ollama import ChatOllama
+            llm = ChatOllama(
+                model=self.config.llm.ollama_model,
+                temperature=self.config.llm.temperature,
+            )
+        else:
+            from langchain_groq import ChatGroq
+            llm = ChatGroq(
+                api_key=self.config.groq_api_key,
+                model=self.config.llm.model_name,
+                temperature=self.config.llm.temperature,
+                max_tokens=self.config.llm.max_tokens,
+            )
+            
+        agent = create_tool_calling_agent(llm, EXTENDED_TOOLS, prompt)
+        executor = AgentExecutor(agent=agent, tools=EXTENDED_TOOLS, verbose=True, max_iterations=8)
+        chat_history_lc = _build_lc_history([], session_id=session_id)
+
+        try:
+            async for event in executor.astream_events(
+                {"input": augmented_message, "chat_history": chat_history_lc},
+                version="v1"
+            ):
+                kind = event["event"]
+                if kind == "on_chat_model_stream":
+                    content = event["data"]["chunk"].content
+                    if content:
+                        yield content
+        except Exception as e:
+            yield f"\n[Stream Execution Error]: {str(e)}"
 
 
 # ──────────────────────────────────────────────

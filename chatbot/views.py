@@ -46,10 +46,10 @@ def chat(request):
         # Get chat history from session if available
         chat_history = request.session.get('chat_history', [])
         
-        # Get response from agent
-        response = agent.chat(message, chat_history=chat_history)
+        # Get response from agent (Inject user_id as the Redis session_id for infinite memory)
+        response = agent.chat(message, chat_history=chat_history, session_id=f"user_{user_id}_chat")
         
-        # Update chat history in session (keep last 10 messages)
+        # Update chat history in session (keep last 10 messages for UI, Redis keeps infinite)
         chat_history.append({
             'user': message,
             'assistant': response
