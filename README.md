@@ -1,14 +1,14 @@
 #  TechHub E-commerce Platform
 
-A comprehensive, full-featured e-commerce platform built with Django, featuring a **fully agentic AI chatbot** powered by LangChain and Local Ollama (Qwen 2.5 3B), a premium dark-themed UI with glassmorphism, secure Stripe payment processing, and real-time analytics.
+A comprehensive, full-featured e-commerce platform built with Django, featuring a **fully agentic AI chatbot** powered by LangChain and Local Ollama (Qwen 2.5 3B) / Groq API, a premium dark-themed UI with glassmorphism, secure Stripe payment processing, and real-time analytics. Upgraded to Production-Grade with `pgvector` Semantic AI Search, JWT/RBAC Auth, and High-Performance Redis Caching & Memory.
 
-![Django](https://img.shields.io/badge/Django-4.2.7-green)
-![Python](https://img.shields.io/badge/Python-3.9-blue)
+![Django](https://img.shields.io/badge/Django-5.0+-green)
+![Python](https://img.shields.io/badge/Python-3.9+-blue)
 ![LangChain](https://img.shields.io/badge/LangChain-Agentic-red)
-![Ollama](https://img.shields.io/badge/Ollama-Local_Inference-white)
-![Groq](https://img.shields.io/badge/Groq-Llama_3.3_70B-orange)
-![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-purple)
-![Stripe](https://img.shields.io/badge/Stripe-API-blue)
+![NeonDB](https://img.shields.io/badge/NeonDB-Serverless_Postgres-blue)
+![Redis](https://img.shields.io/badge/Redis-Caching_%26_Memory-red)
+![pgvector](https://img.shields.io/badge/pgvector-Semantic_Search-purple)
+![Security](https://img.shields.io/badge/JWT_Auth-RBAC-yellow)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
@@ -53,13 +53,15 @@ TechHub is a professional-grade e-commerce platform built with Django. What sets
 ### Key Achievements
 
 - ✅ **Fully Agentic AI Chatbot** — LLM autonomously selects and chains tools using ReAct reasoning
-- ✅ **12 Database Tools** — Cart, wishlist, orders, products, profile operations via natural language
-- ✅ **RAG Knowledge Base** — FAISS vector store for store-specific Q&A
+- ✅ **pgvector Semantic Search** — HuggingFace encodings matched directly against NeonDB via `CosineDistance`
+- ✅ **Infinite Conversational Memory** — LangChain `RedisChatMessageHistory` linked natively to `user_id` session states
+- ✅ **Asynchronous Streaming (SSE/WebSockets)** — `astream_events` backend generators readied for sub-second text streaming
+- ✅ **Strict LLM Guardrails & HitL Checkout** — Heuristic query sanitization, Jailbreak defense, and explicit Human-In-The-Loop link verification for financial actions
+- ✅ **JWT & RBAC Security Layer** — Fully isolated token-based auth for stateless production endpoints
+- ✅ **13 Database Tools** — Cart, wishlist, orders, products, profile operations via natural language
 - ✅ **Intelligent Recommendations** — Bayesian average rating system with time-decay ranking
-- ✅ **Premium Dark UI** — Glassmorphism, gradient accents, scroll-reveal animations
 - ✅ **Secure Payment Processing** with Stripe integration
 - ✅ **Comprehensive Analytics** and reporting dashboard
-- ✅ **Responsive Design** optimized for all devices
 
 ---
 
@@ -153,32 +155,19 @@ The LLM autonomously decides which tools to call, in what order, and how to inte
 
 When a user asks *"What is TechHub's return policy?"*, the RAG pipeline retrieves relevant chunks from the knowledge base and injects them into the system prompt — no tool call needed.
 
-**3. Conversational Memory**
+**3. Conversational Memory (Persistent)**
 
-Chat history is stored in the Django session (last 10 turns) and loaded seamlessly into the frontend widget on page loads using Django Template syntax. This enables multi-turn, persistent conversations across different pages:
+Chat history dynamically syncs through `RedisChatMessageHistory` inside `AI/agent.py`. The Django view securely passes the `request.user.id` into the LangChain session ID parameter, allowing the LLM to access **infinite chat history** without relying on transient HTTP sessions or local database bloat. If a user logs out and logs back in weeks later, the AI maintains perfect continuity.
 
-```
-User: "Show me laptops"
-Bot:  [calls search_products] → "Here are 3 laptops: Dell XPS 13 ($1299), MacBook Pro ($1999)..."
-User: "Add the first one to my cart"
-Bot:  [calls add_to_cart(product_id=2)] → "Done! Dell XPS 13 added to your cart."
-```
+**4. Output Formatting, Security, & Guardrails**
 
-**4. Output Formatting & Resilience**
+- **Semantic AI Vector Search**: Implemented via `pgvector` inside `search_products`. Translates contextual searches ("waterproof headphones for gym") into vector embeddings for fuzzy logical matches against DB records.
+- **Human-In-The-Loop (HITL) Checkouts**: The Agent is strictly prohibited from autonomously modifying DB records for financial transactions. When creating orders, it securely generates a Clickable Checkout Verification Link (`generate_checkout_link`), enforcing manual user confirmation.
+- **Pre-execution Heuristic Filters**: Lightning-fast string sanitization layer detects malicious inputs, hate speech, and Jailbreak attempts (`"DAN"`, `"Ignore all previous instructions"`) before LLM API calls are even mapped—saving tokens and securing system integrity.
+- **Strict Role-Based Access (JWT/RBAC)**: Backend views are securely scoped via Token authentication and permission matrices.
+- **Asynchronous Data Pipelines**: Fully migrated `chat` endpoints into LangChain `astream_chat` generator pipelines capable of feeding Real-Time Server-Sent-Events (SSE) down to the WebSockets UI.
 
-- **Regex Output Sanitizer**: A custom Python parser automatically strips markdown formatting and emojis from the LLM's outputs to strictly enforce a clean, professional chat interface.
-- **Hallucination Guards**: The `SYSTEM_PROMPT` enforces strict negative constraints to prevent the model from faking tool calls or fabricating nonexistent products.
-- **Tool Validation Recovery**: If the LLM generates malformed JSON tool arguments, the AgentExecutor automatically injects a corrective prompt forcing the model to fix its schema.
-- **API Resilience**: Exponential backoff (15s, 30s) is strictly implemented for users opting to use the cloud Groq API instead of the local Ollama backend.
-
-**5. Security Model**
-
-- **Authentication Gate**: Chatbot widget only renders for `{% if user.is_authenticated %}`
-- **User Scoping**: Every tool receives `user_id` from the authenticated session — users can only access their own data
-- **CSRF Protection**: All API calls go through Django's CSRF middleware
-- **Session Isolation**: Chat history is per-user, stored in Django's session backend
-
-### All 12 Agent Tools
+### All 13 Agent Tools
 
 | # | Tool | Args | Description |
 |---|------|------|-------------|
@@ -191,9 +180,10 @@ Bot:  [calls add_to_cart(product_id=2)] → "Done! Dell XPS 13 added to your car
 | 7 | `get_user_wishlist` | `user_id: int` | Returns all wishlist items with product details and timestamps. |
 | 8 | `add_to_wishlist` | `user_id, product_id` | Adds a product to the user's wishlist. Prevents duplicates. |
 | 9 | `remove_from_wishlist` | `user_id, product_id` | Removes a product from the user's wishlist. |
-| 10 | `get_user_orders` | `user_id: int` | Returns all orders with order numbers, statuses, amounts, and item counts. |
-| 11 | `place_order` | `user_id: int` | Converts all cart items into a new order, generates an order number, and clears the cart. |
-| 12 | `get_user_profile` | `user_id: int` | Returns username, email, join date, and total order count. |
+| 10 | `semantic_search_products` | `query: str` | `pgvector` HuggingFace CosineDistance embedding logical searches. |
+| 11 | `get_user_orders` | `user_id: int` | Returns all orders with order numbers, statuses, amounts, and item counts. |
+| 12 | `generate_checkout_link` | `user_id: int` | Converts all cart items into a secure verification URI, forcing Human-in-The-Loop payment. |
+| 13 | `get_user_profile` | `user_id: int` | Returns username, email, join date, and total order count. |
 
 ### File Structure — AI Module
 
@@ -335,18 +325,19 @@ The recommendation system natively powers several components of the platform:
 ## Tech Stack
 
 ### Backend Framework
-- **Django 4.2.7**: High-level Python web framework
-- **Python 3.9**: Modern Python programming language
-- **SQLite3**: Lightweight database for development
-- **Django ORM**: Object-relational mapping system
+- **Django 5+**: High-level Python web framework
+- **Python 3.9+**: Modern Python programming language
+- **NeonDB Serverless Postgres**: Production `pgvector` database backend
+- **Redis Cache**: High-performance Session, Agent Memory & Page caching
+- **JWT (JSON Web Tokens)**: Securing REST APIs alongside Django session authentication
 - **Celery & Redis**: Background asynchronous task queues
 
 ### Frontend Technologies
 - **HTML5 / CSS3 / JavaScript**: Core web technologies
 - **Bootstrap 5.3**: Responsive CSS framework (dark mode via `data-bs-theme`)
+- **WebSockets / SSE**: Streaming asynchronous LLM chunk deliveries.
 - **Inter (Google Fonts)**: Modern sans-serif typography
 - **Font Awesome 6**: Icon library
-- **Custom CSS**: 880+ lines — glassmorphism, gradients, scroll-reveal animations
 
 ### AI & Agentic System
 - **LangChain**: Framework for building agentic LLM applications
