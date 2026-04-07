@@ -18,6 +18,8 @@ from langchain_groq import ChatGroq
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.tools import BaseTool
+import asyncio
 
 from AI.config import ChatbotConfig
 from AI.services.rag_service import RAGService
@@ -69,6 +71,8 @@ ABSOLUTE RULES (NEVER BREAK THESE):
 6. When calling tools, use the correct built-in tool calling format. NEVER append JSON arguments \
    directly to the tool name string.
 
+7. REASONING FIRST (CHAIN OF THOUGHT): Before you answer the user or call a tool, you MUST plan your steps out loud. Wrap your step-by-step thinking in a <think> ... </think> block. This enables you to process complex instructions safely and calculate constraints efficiently.
+
 Other guidelines:
 - For greetings, respond warmly WITHOUT calling any tools.
 - Be concise (2-4 sentences max unless listing items).
@@ -82,6 +86,7 @@ Other guidelines:
 # Tool list
 # ──────────────────────────────────────────────
 ALL_TOOLS = [
+    # Standard TechHub DB tools
     get_user_orders,
     get_user_cart,
     add_to_cart,
@@ -95,6 +100,42 @@ ALL_TOOLS = [
     get_user_profile,
     place_order,
 ]
+
+# ──────────────────────────────────────────────
+# MCP (Model Context Protocol) Registry Builder
+# ──────────────────────────────────────────────
+def fetch_mcp_tools(server_script_paths: List[str]) -> List[BaseTool]:
+    """
+    Dynamically boot up local MCP servers via STDIO and load their tools into LangChain.
+    This drastically expands the Agent's reasoning execution layers.
+    """
+    try:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+        from langchain_mcp_adapters.tools import load_mcp_tools
+
+        async def _load():
+            mcp_tools = []
+            for script_path in server_script_paths:
+                if not os.path.exists(script_path):
+                    continue
+                server_params = StdioServerParameters(command="python", args=[script_path])
+                async with stdio_client(server_params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        tools = await load_mcp_tools(session)
+                        mcp_tools.extend(tools)
+            return mcp_tools
+
+        loop = asyncio.new_event_loop()
+        return loop.run_until_complete(_load())
+    except Exception as e:
+        print(f"[MCP Warning] Failed to fetch external MCP tools: {e}")
+        return []
+
+# Initialize External MCP Tools from configured scripts (if any exist)
+EXTERNAL_MCP_SERVERS = [os.path.join(os.path.dirname(__file__), "mcp_servers", "calculator_server.py")]
+EXTENDED_TOOLS = ALL_TOOLS + fetch_mcp_tools(EXTERNAL_MCP_SERVERS)
 
 
 def _build_lc_history(raw_history: List[Dict]) -> List:
@@ -200,12 +241,12 @@ class ChatbotAgent:
                     max_tokens=self.config.llm.max_tokens,
                 )
 
-            agent = create_tool_calling_agent(llm, ALL_TOOLS, prompt)
+            agent = create_tool_calling_agent(llm, EXTENDED_TOOLS, prompt)
             executor = AgentExecutor(
                 agent=agent,
-                tools=ALL_TOOLS,
+                tools=EXTENDED_TOOLS,
                 verbose=True,
-                max_iterations=6,
+                max_iterations=8, # Bumped iterations to allow for deep CoT loops
                 handle_parsing_errors=(
                     "Tool call validation failed. "
                     "CRITICAL: You must provide the tool name separate from the tool arguments. "
