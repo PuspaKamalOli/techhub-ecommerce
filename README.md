@@ -115,6 +115,7 @@ cp .env.example .env  # then edit .env with your keys
 
 **Minimum `.env` to get started:**
 ```env
+DATABASE_URL = 'api key from neon for postgresql'
 SECRET_KEY=your-django-secret-key
 GROQ_API_KEY=your-groq-key  # get free key at console.groq.com
 STRIPE_PUBLISHABLE_KEY=pk_test_...
