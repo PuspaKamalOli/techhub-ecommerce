@@ -25,7 +25,7 @@ Built with Django, LangChain, pgvector, Redis, and Stripe.
 
 ---
 
-## 🧠 Core Architecture
+## Core Architecture
 
 ```
 User → Django API → LangChain ReAct Agent → Tool Calls → Database/Stripe → Response
@@ -46,7 +46,7 @@ No hardcoded workflows — the LLM dynamically plans and executes actions based 
 
 ---
 
-## 🚀 Why This Matters
+## Why This Matters
 
 This project demonstrates how LLMs can move beyond chat interfaces into **autonomous systems that interact with real-world APIs and databases** — a key direction for modern AI applications in production.
 
@@ -63,7 +63,7 @@ This project demonstrates how LLMs can move beyond chat interfaces into **autono
 - Jailbreak/injection heuristic filter runs before any LLM API call
 - Failure handling, retry logic, and rate-limit resilience for all LLM/tool interactions
 
-**⚙️ Production-Grade Backend**
+**Production-Grade Backend**
 - NeonDB (serverless Postgres) + `pgvector`
 - Redis for caching and agent memory
 - JWT/RBAC for stateless API auth
@@ -77,7 +77,7 @@ This project demonstrates how LLMs can move beyond chat interfaces into **autono
 - Bayesian + time-decay recommendation engine (not basic "highest sales" sorting)
 - Analytics dashboard with sales metrics and product performance
 
-**🎨 UI**
+**UI**
 - Dark theme with glassmorphism, gradient accents, micro-animations
 - Bootstrap 5.3 dark mode, Inter font, fully responsive
 
